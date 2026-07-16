@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.3.0 – 2026-07-16 (not yet published)
+
+### ✨ New Feature: Activity-Based "And" Flow Condition Cards
+- Added three condition cards, requested by @wepa (post #52) to avoid shutting the NAS down while a backup is still running:
+  - **Disk activity is (not) above X kB/s** — combined read + write rate
+  - **Network activity is (not) above X kB/s** — combined download + upload rate
+  - **CPU usage is (not) above X %**
+- Note: UGOS's local API does not expose a documented "backup task running" state (checked the HA integration, UgreenNASAdmin and NAS Monitor reverse-engineering projects), so these cards use live activity metrics as a reliable proxy: a running backup shows up as sustained disk and/or network throughput. All three cards support Homey's native invert toggle ("is / isn't").
+
 ## v1.2.9 – 2026-07-16
 
 ### ✨ New Feature: "Shut down the NAS" and "Reboot the NAS" Flow Action Cards

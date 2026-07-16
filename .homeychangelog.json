@@ -7,5 +7,8 @@
   },
   "1.2.9": {
     "en": "Added new Flow action cards: 'Shut down the NAS' and 'Reboot the NAS' — power off or restart your NAS from a Flow (e.g. when you go to sleep)."
+  },
+  "1.3.0": {
+    "en": "Added new Flow condition cards: 'Disk activity is above...', 'Network activity is above...' and 'CPU usage is above...' — e.g. only shut the NAS down once your backup has finished (low disk/network activity)."
   }
 }

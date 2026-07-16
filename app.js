@@ -16,6 +16,26 @@ class UgreenNasApp extends Homey.App {
       .registerRunListener(async ({ device }) => {
         await device.getClient().reboot();
       });
+
+    this.homey.flow.getConditionCard('disk_activity_above')
+      .registerRunListener(async ({ device, rate }) => {
+        const read = device.getCapabilityValue('disk_read_rate') || 0;
+        const write = device.getCapabilityValue('disk_write_rate') || 0;
+        return (read + write) > rate;
+      });
+
+    this.homey.flow.getConditionCard('network_activity_above')
+      .registerRunListener(async ({ device, rate }) => {
+        const rx = device.getCapabilityValue('measure_network_rx') || 0;
+        const tx = device.getCapabilityValue('measure_network_tx') || 0;
+        return (rx + tx) > rate;
+      });
+
+    this.homey.flow.getConditionCard('cpu_usage_above')
+      .registerRunListener(async ({ device, percent }) => {
+        const cpu = device.getCapabilityValue('measure_cpu') || 0;
+        return cpu > percent;
+      });
   }
 
   getUgreenNasDevices() {
