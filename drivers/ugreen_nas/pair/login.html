@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+    <!-- No /homey.js include here on purpose: in custom PAIR views the Homey
+         object is injected globally by every client (mobile app, my.homey.app,
+         self-hosted web UI). Including /homey.js with data-origin makes the
+         client try to fetch /js/homey.<origin>.js, which does not exist on
+         Homey Self-Hosted Server setups ("Could not load script" errors).
+         The include is only for app SETTINGS pages, not pair views. -->
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            padding: 20px;
+        }
+
+        .field {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 10px;
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            gap: 10px;
+        }
+
+        .toggle-row label {
+            margin-bottom: 0;
+            font-weight: normal;
+        }
+
+        .hint {
+            color: #666;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .button {
+            background-color: #007AFF;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+
+        .button:disabled {
+            background-color: #ccc;
+        }
+
+        .error {
+            color: red;
+            margin-top: 10px;
+            font-size: 14px;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="field">
+        <label for="ip">IP Address</label>
+        <input type="text" id="ip" placeholder="192.168.1.100" />
+    </div>
+
+    <div class="field">
+        <label for="port">Port</label>
+        <input type="number" id="port" value="9999" />
+    </div>
+
+    <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" placeholder="admin" />
+    </div>
+
+    <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" />
+    </div>
+
+    <div class="toggle-row">
+        <input type="checkbox" id="useHttps" />
+        <label for="useHttps">Use HTTPS (self-signed cert OK)</label>
+    </div>
+    <div class="hint">Enable if your NAS is behind a reverse proxy (e.g. Nginx Proxy Manager) or uses HTTPS on the given port.</div>
+
+    <button class="button" id="loginBtn" onclick="login()">Login &amp; Add Device</button>
+    <div id="errorMsg" class="error"></div>
+
+    <script type="text/javascript">
+        // HomeyRef is only assigned once the injected global Homey object has
+        // been picked up (either directly, via the startup poll below, or via
+        // onHomeyReady on clients that call it). Calling Homey.* before it is
+        // available is a race condition: on slow or reverse-proxied connections
+        // it can throw silently and leave the pairing session stuck open on the
+        // backend (surfaces later as "Error 409: Another pair session is
+        // already active").
+        let HomeyRef = null;
+        let pendingTimeout = null;
+
+        function resetButton(message) {
+            const btn = document.getElementById('loginBtn');
+            const errDiv = document.getElementById('errorMsg');
+            btn.disabled = false;
+            btn.innerText = 'Login & Add Device';
+            if (message) {
+                errDiv.innerText = message;
+                errDiv.style.display = 'block';
+            }
+        }
+
+        function login() {
+            const btn = document.getElementById('loginBtn');
+            const errDiv = document.getElementById('errorMsg');
+
+            if (!HomeyRef) {
+                // Last-chance check: the global may have appeared after the
+                // startup poll gave up (e.g. the user left the dialog open).
+                if (typeof Homey !== 'undefined' && Homey && typeof Homey.emit === 'function') {
+                    initHomey(Homey);
+                } else {
+                    errDiv.innerText = 'Still connecting to Homey, please wait a moment and try again.';
+                    errDiv.style.display = 'block';
+                    return;
+                }
+            }
+
+            btn.disabled = true;
+            btn.innerText = 'Connecting...';
+            errDiv.style.display = 'none';
+
+            const ip = document.getElementById('ip').value;
+            const port = document.getElementById('port').value;
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const useHttps = document.getElementById('useHttps').checked;
+
+            if (!ip || !username || !password) {
+                resetButton('Please fill all required fields');
+                return;
+            }
+
+            // Guard against the callback never firing (e.g. a hung connection
+            // through a reverse proxy). Without this the button stays disabled
+            // forever, forcing the user to force-quit and retry pairing while
+            // the previous session may still be active on the backend.
+            clearTimeout(pendingTimeout);
+            pendingTimeout = setTimeout(() => {
+                resetButton('Connection timed out. Please check the IP/port and try again.');
+            }, 20000);
+
+            HomeyRef.emit('login', { ip, port, username, password, useHttps }, function (err, device) {
+                clearTimeout(pendingTimeout);
+                if (err) {
+                    let errMsg = err.message || err;
+                    if (errMsg.includes('self-signed') || errMsg.includes('certificate') || errMsg.includes('fetch failed')) {
+                        errMsg += '\n\nTip: Try enabling "Use HTTPS" checkbox above if your NAS is behind a proxy.';
+                    }
+                    resetButton(errMsg);
+                    return;
+                }
+
+                HomeyRef.createDevice(device, function (err, result) {
+                    if (err) {
+                        resetButton('Error creating device: ' + (err.message || err));
+                        return;
+                    }
+                    HomeyRef.done();
+                });
+            });
+        }
+
+        function initHomey(homey) {
+            if (HomeyRef) return;
+            HomeyRef = homey;
+            try { homey.setTitle('Add Ugreen NAS'); } catch (e) { /* cosmetic only */ }
+        }
+
+        function onHomeyReady(Homey) {
+            initHomey(Homey);
+        }
+
+        // Some pairing environments (e.g. the mobile app webview) inject the
+        // Homey object as a global instead of calling onHomeyReady. Poll for it
+        // briefly so pairing works in both cases.
+        (function waitForGlobalHomey(attempts) {
+            if (HomeyRef) return;
+            if (typeof Homey !== 'undefined' && Homey && typeof Homey.emit === 'function') {
+                initHomey(Homey);
+                return;
+            }
+            if (attempts > 0) setTimeout(() => waitForGlobalHomey(attempts - 1), 250);
+        })(40);
+    </script>
+</body>
+
+</html>

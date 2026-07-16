@@ -1,0 +1,11 @@
+{
+  "1.2.7": {
+    "en": "Fixed the pairing screen failing to load on my.homey.app (Error: Could not load script /js/homey.views.js). The Homey SDK is now loaded with the correct pair origin, and a fallback was added so pairing initializes reliably in both the web and mobile app clients."
+  },
+  "1.2.8": {
+    "en": "Fixed pairing on Homey Self-Hosted Server and my.homey.app: removed the /homey.js include from the pairing view (pair views receive the Homey object automatically; the include caused 'Could not load script /js/homey.pair.js' errors). Pairing now works across the mobile app, my.homey.app and self-hosted web clients."
+  },
+  "1.2.9": {
+    "en": "Added new Flow action cards: 'Shut down the NAS' and 'Reboot the NAS' — power off or restart your NAS from a Flow (e.g. when you go to sleep)."
+  }
+}

@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ugreen NAS Status</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0f1614;
+      --panel: #18211e;
+      --panel-2: #202c28;
+      --text: #f4fbf7;
+      --muted: #a6b4ad;
+      --green: #42d98b;
+      --blue: #5db7ff;
+      --amber: #ffc857;
+      --red: #ff6b6b;
+      --ring: rgba(255, 255, 255, 0.12);
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f7faf8;
+        --panel: #ffffff;
+        --panel-2: #edf3f0;
+        --text: #14211c;
+        --muted: #5d6c65;
+        --ring: rgba(20, 33, 28, 0.12);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 300px;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+
+    body {
+      margin: 0;
+      min-width: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      background: var(--panel-2);
+      color: var(--text);
+      font: inherit;
+      min-width: 32px;
+      min-height: 32px;
+    }
+
+    .widget {
+      display: grid;
+      gap: 7px;
+      grid-template-rows: auto 1fr;
+      height: 300px;
+      min-height: 0;
+      overflow: hidden;
+      padding: 14px 12px 10px;
+      overscroll-behavior: none;
+      touch-action: manipulation;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .title {
+      min-width: 0;
+    }
+
+    .name {
+      overflow: hidden;
+      font-size: 16px;
+      font-weight: 750;
+      line-height: 1.15;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--red);
+      flex: 0 0 auto;
+    }
+
+    .dot.online {
+      background: var(--green);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: repeat(3, minmax(0, 1fr));
+      gap: 7px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .metric {
+      --accent: var(--green);
+      --accent-soft: rgba(66, 217, 139, 0.12);
+      min-width: 0;
+      border: 1px solid var(--ring);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 7px 8px;
+      overflow: hidden;
+    }
+
+    .metric.wide {
+      grid-column: 1 / -1;
+    }
+
+    .metric-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .metric-copy {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .metric-icon {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      flex: 0 0 32px;
+      place-items: center;
+      border-radius: 9px;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .metric-icon svg {
+      width: 19px;
+      height: 19px;
+      stroke: currentColor;
+      stroke-width: 2.1;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+    }
+
+    .label {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.2;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .value {
+      min-width: 0;
+      overflow: hidden;
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 0.96;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .bar {
+      height: 5px;
+      margin-top: 6px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--panel-2);
+    }
+
+    .fill {
+      height: 100%;
+      width: 0;
+      border-radius: inherit;
+      background: var(--accent);
+      transition: width 180ms ease;
+    }
+
+    .fill.warm {
+      background: var(--amber);
+    }
+
+    .fill.hot {
+      background: var(--red);
+    }
+
+    .details {
+      display: grid;
+      gap: 8px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--ring);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+
+    .row-name {
+      overflow: hidden;
+      color: var(--muted);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .row-value {
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .empty,
+    .error {
+      display: grid;
+      min-height: 250px;
+      align-content: center;
+      gap: 8px;
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 18px;
+      text-align: center;
+    }
+
+    .empty strong,
+    .error strong {
+      font-size: 16px;
+    }
+
+    .empty span,
+    .error span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+  </style>
+</head>
+<body>
+  <main id="app" class="widget" aria-live="polite"></main>
+
+  <script>
+    const app = document.getElementById('app');
+    let HomeyRef;
+    let refreshTimer;
+
+    function t(key) {
+      const labels = {
+        loading: 'Loading',
+        noDevice: 'No NAS device',
+        noDeviceHint: 'Add your Ugreen NAS device in Homey before using this widget.',
+        unavailable: 'Offline',
+        online: 'Online',
+        cpu: 'CPU',
+        ram: 'RAM',
+        temp: 'Temperature',
+        network: 'Network',
+        storage: 'Storage',
+        fans: 'Fans',
+        disks: 'Disks',
+        updated: 'Updated',
+        error: 'Could not load data',
+        retry: 'Retry',
+      };
+      return labels[key] || key;
+    }
+
+    function formatPercent(value) {
+      const number = Number(value || 0);
+      return `${Math.round(number)}%`;
+    }
+
+    function formatRate(value) {
+      const number = Number(value || 0);
+      if (number >= 1024) return `${(number / 1024).toFixed(1)} MB/s`;
+      return `${Math.round(number)} kB/s`;
+    }
+
+    function formatTime(iso) {
+      if (!iso) return '';
+      try {
+        return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } catch (err) {
+        return '';
+      }
+    }
+
+    function fillClass(value) {
+      const number = Number(value || 0);
+      if (number >= 85) return 'hot';
+      if (number >= 70) return 'warm';
+      return '';
+    }
+
+    function tempState(temp) {
+      const number = Number(temp || 0);
+      const percent = Math.max(5, Math.min(100, ((number - 30) / 55) * 100));
+
+      if (number >= 85) return { color: '#ff4d4f', soft: 'rgba(255, 77, 79, 0.15)', percent };
+      if (number >= 70) return { color: '#ff9f1a', soft: 'rgba(255, 159, 26, 0.16)', percent };
+      if (number >= 60) return { color: '#ffd166', soft: 'rgba(255, 209, 102, 0.17)', percent };
+      if (number >= 45) return { color: '#42d98b', soft: 'rgba(66, 217, 139, 0.14)', percent };
+      return { color: '#37a6ff', soft: 'rgba(55, 166, 255, 0.15)', percent };
+    }
+
+    function icon(name) {
+      const icons = {
+        cpu: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"></rect><path d="M4 10h3M4 14h3M17 10h3M17 14h3M10 4v3M14 4v3M10 17v3M14 17v3"></path></svg>',
+        ram: '<svg viewBox="0 0 24 24"><path d="M6 8h12v8H6z"></path><path d="M8 8V5M12 8V5M16 8V5M8 19v-3M12 19v-3M16 19v-3M4 10h2M4 14h2M18 10h2M18 14h2"></path></svg>',
+        temp: '<svg viewBox="0 0 24 24"><path d="M14 14.8V5a4 4 0 0 0-8 0v9.8a6 6 0 1 0 8 0z"></path><path d="M10 16V8"></path></svg>',
+        network: '<svg viewBox="0 0 24 24"><path d="M12 4v13"></path><path d="m6 11 6 6 6-6"></path><path d="M5 20h14"></path></svg>',
+        storage: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"></ellipse><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"></path><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path></svg>',
+      };
+      return icons[name] || '';
+    }
+
+    function accentGradient(from, to) {
+      return `linear-gradient(90deg, ${from} 0%, ${to} 100%)`;
+    }
+
+    function metric(label, value, percent, className = '', iconName = '', color = '#42d98b', soft = 'rgba(66, 217, 139, 0.12)', fillStyle = '') {
+      const width = Math.max(0, Math.min(100, Number(percent || 0)));
+      const fillBackground = fillStyle || color;
+      const fillBackgroundSize = fillStyle && width > 0 ? `${10000 / width}% 100%` : 'auto';
+      return `
+        <section class="metric ${className}" style="--accent: ${color}; --accent-soft: ${soft};">
+          <div class="metric-head">
+            <span class="metric-icon" aria-hidden="true">${icon(iconName)}</span>
+            <div class="metric-copy">
+              <div class="value">${value}</div>
+              <div class="label">${label}</div>
+            </div>
+          </div>
+          <div class="bar"><div class="fill ${fillStyle ? '' : fillClass(width)}" style="width: ${width}%; background: ${fillBackground}; background-size: ${fillBackgroundSize}; background-position: left center;"></div></div>
+        </section>
+      `;
+    }
+
+    function rows(title, items, valueFn) {
+      if (!items || items.length === 0) return '';
+      return `
+        <section class="details" aria-label="${title}">
+          ${items.slice(0, 4).map(item => `
+            <div class="row">
+              <div class="row-name">${item.name}</div>
+              <div class="row-value">${valueFn(item)}</div>
+            </div>
+          `).join('')}
+        </section>
+      `;
+    }
+
+    function renderEmpty(message, hint) {
+      app.innerHTML = `
+        <section class="empty">
+          <strong>${message}</strong>
+          <span>${hint}</span>
+        </section>
+      `;
+    }
+
+    function renderError(error) {
+      app.innerHTML = `
+        <section class="error">
+          <strong>${t('error')}</strong>
+          <span>${error && error.message ? error.message : String(error)}</span>
+          <button id="retry" type="button">${t('retry')}</button>
+        </section>
+      `;
+      document.getElementById('retry').addEventListener('click', refresh);
+    }
+
+    function render(payload) {
+      if (!payload || !payload.ready) {
+        renderEmpty(t('noDevice'), payload && payload.message ? payload.message : t('noDeviceHint'));
+        return;
+      }
+
+      const data = payload.data || {};
+      const settings = HomeyRef.getSettings ? HomeyRef.getSettings() : {};
+      const showStorage = settings.showStorage !== false;
+      const cpuUsage = Number(data.cpu && data.cpu.usage || 0);
+      const ramUsage = Number(data.ram && data.ram.usage || 0);
+      const temp = Number(data.cpu && data.cpu.temperature || 0);
+      const netDown = data.network && data.network.download || 0;
+      const primaryPool = data.pools && data.pools[0];
+      const thermal = tempState(temp);
+      const thermalGradient = 'linear-gradient(90deg, #37a6ff 0%, #42d98b 35%, #ffd166 64%, #ff9f1a 82%, #ff4d4f 100%)';
+      const cpuGradient = accentGradient('#7c5cff', '#b28cff');
+      const ramGradient = accentGradient('#18b6ff', '#5fd6ff');
+      const networkGradient = accentGradient('#2294ff', '#6fdcff');
+      const storageGradient = accentGradient('#24c26a', '#82e58f');
+
+      app.innerHTML = `
+        <div class="topbar">
+          <div class="title">
+            <div class="name">${payload.device.name}</div>
+            <div class="meta">
+              <span class="dot ${payload.device.available ? 'online' : ''}"></span>
+              <span>${payload.device.available ? t('online') : t('unavailable')}</span>
+              <span>${t('updated')} ${formatTime(payload.updatedAt)}</span>
+            </div>
+          </div>
+          <button id="refresh" type="button" title="${t('retry')}">&#8635;</button>
+        </div>
+        <section class="grid">
+          ${metric(t('cpu'), formatPercent(cpuUsage), cpuUsage, '', 'cpu', '#7c5cff', 'rgba(124, 92, 255, 0.14)', cpuGradient)}
+          ${metric(t('ram'), formatPercent(ramUsage), ramUsage, '', 'ram', '#18b6ff', 'rgba(24, 182, 255, 0.14)', ramGradient)}
+          ${metric(t('temp'), `${Math.round(temp)} &deg;C`, thermal.percent, '', 'temp', thermal.color, thermal.soft, thermalGradient)}
+          ${metric(t('network'), `&darr; ${formatRate(netDown)}`, Math.min(100, Number(netDown) / 10), '', 'network', '#2294ff', 'rgba(34, 148, 255, 0.14)', networkGradient)}
+          ${showStorage && primaryPool ? metric(t('storage'), formatPercent(primaryPool.usage), primaryPool.usage, 'wide', 'storage', '#24c26a', 'rgba(36, 194, 106, 0.14)', storageGradient) : ''}
+        </section>
+      `;
+
+      document.getElementById('refresh').addEventListener('click', () => {
+        if (HomeyRef.hapticFeedback) HomeyRef.hapticFeedback();
+        refresh();
+      });
+    }
+
+    async function refresh() {
+      try {
+        const deviceIds = HomeyRef.getDeviceIds ? HomeyRef.getDeviceIds() : [];
+        const payload = await HomeyRef.api('POST', '/status', { deviceIds });
+        render(payload);
+      } catch (err) {
+        renderError(err);
+      }
+    }
+
+    function scheduleRefresh() {
+      clearInterval(refreshTimer);
+      const settings = HomeyRef.getSettings ? HomeyRef.getSettings() : {};
+      const seconds = Math.max(10, Math.min(300, Number(settings.refreshInterval || 30)));
+      refreshTimer = setInterval(refresh, seconds * 1000);
+    }
+
+    function onHomeyReady(Homey) {
+      HomeyRef = Homey;
+      renderEmpty(t('loading'), '');
+      refresh().finally(() => Homey.ready({ height: 300 }));
+      scheduleRefresh();
+    }
+  </script>
+</body>
+</html>

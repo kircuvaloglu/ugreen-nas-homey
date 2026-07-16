@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Outer NAS Case -->
+  <rect x="32" y="32" width="192" height="192" rx="16" fill="none" stroke="currentColor" stroke-width="12" />
+  
+  <!-- Drive Bay 1 -->
+  <rect x="56" y="64" width="24" height="100" rx="4" fill="none" stroke="currentColor" stroke-width="8" />
+  <!-- Drive Bay 1 LED -->
+  <circle cx="68" cy="144" r="4" fill="currentColor" stroke="none" />
+  
+  <!-- Drive Bay 2 -->
+  <rect x="92" y="64" width="24" height="100" rx="4" fill="none" stroke="currentColor" stroke-width="8" />
+  <!-- Drive Bay 2 LED -->
+  <circle cx="104" cy="144" r="4" fill="currentColor" stroke="none" />
+  
+  <!-- Drive Bay 3 -->
+  <rect x="128" y="64" width="24" height="100" rx="4" fill="none" stroke="currentColor" stroke-width="8" />
+  <!-- Drive Bay 3 LED -->
+  <circle cx="140" cy="144" r="4" fill="currentColor" stroke="none" />
+  
+  <!-- Drive Bay 4 -->
+  <rect x="164" y="64" width="24" height="100" rx="4" fill="none" stroke="currentColor" stroke-width="8" />
+  <!-- Drive Bay 4 LED -->
+  <circle cx="176" cy="144" r="4" fill="currentColor" stroke="none" />
+
+  <!-- Power Button -->
+  <circle cx="128" cy="190" r="10" fill="none" stroke="currentColor" stroke-width="6" />
+</svg>
