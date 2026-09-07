@@ -10,5 +10,8 @@
   },
   "1.3.0": {
     "en": "Added new Flow condition cards: 'Disk activity is above...', 'Network activity is above...' and 'CPU usage is above...' — e.g. only shut the NAS down once your backup has finished (low disk/network activity)."
+  },
+  "1.4.0": {
+    "en": "Fixed login failing on accounts with two-factor authentication enabled (the NAS reported a misleading 'client is not compatible with the firmware' error). Pairing now asks for your authenticator code once and registers Homey as a trusted device. Added a Repair option to reconnect an existing NAS without removing it, and a new Flow condition 'A backup task is running' so a Flow can wait for your backup to finish."
   }
 }

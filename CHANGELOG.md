@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.4.0 – 2026-09-07 (not yet published)
+
+### 🐛 Bug Fix: Login Failed on Accounts With Two-Factor Authentication
+- Reported by @byackee1 (post #56) on a UNAS 6800 Pro: *"Login failed: The client is not compatible with the firmware, please update the client!"*. Despite the wording this is not a firmware or version problem — UGOS answers with code `9406` when the login payload sets `otp: false` while the account has 2FA enabled. The same misleading error was diagnosed by the community UGOS reverse-engineering work ([home-assistant_ugreen-nas#247](https://github.com/Tom-Bom-badil/home-assistant_ugreen-nas/pull/247)).
+- The login now opts into the OTP handshake (`otp: true`). Accounts without 2FA are unaffected and still receive their token straight away.
+- Accounts with 2FA get a second pairing step asking for the current authenticator code. The code is confirmed with `trust: true` against a generated `UG-Client-Id`, which registers this app as a trusted device on the NAS, so the code is only ever needed once. The client id is stored on the device and sent on every later login.
+- If the login fails with `9406` anyway, the error message now points at two-factor authentication instead of repeating the misleading firmware text.
+
+### ✨ New Feature: Repair Flow
+- Devices can now be reconnected from *Device settings → Repair* instead of being deleted and added again (Flows, Insights history and device names are kept). Useful after a password change, or when 2FA is switched on for an account that was paired earlier. The form is pre-filled with the known address and username; the polling client is refreshed immediately afterwards.
+- A device that stops working because 2FA was enabled now says so, and points to Repair, instead of only reporting a failed login.
+
+### ✨ New Feature: "A backup task is running" Flow Condition
+- Adds the check @wepa originally asked for (post #52): a condition card that reads the Backup Center tasks from the NAS (`/ugreen/v2/web/syncbackup/task/list`) and reports whether any task is currently running, so a Flow can postpone a shutdown until the backup has finished. Results are cached for a few seconds so several cards in one Flow only cause a single request.
+- The activity-threshold cards from v1.3.0 stay available as a fallback for setups where the Backup Center is not used. Correction to the note in v1.3.0: UGOS *does* expose backup task state; the endpoints had simply been missed in the earlier research.
+
+### 🧹 Housekeeping
+- Requests to the NAS no longer identify this app as `HomeAssistant/2026.1.0 aiohttp/...` (a leftover from the original API research) but as `Homey-UgreenNAS`.
+- Added the missing `<meta charset="utf-8">` to the pairing views so non-ASCII characters render correctly.
+
 ## v1.3.0 – 2026-07-16 (not yet published)
 
 ### ✨ New Feature: Activity-Based "And" Flow Condition Cards

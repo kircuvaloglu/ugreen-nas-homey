@@ -2,6 +2,7 @@
 <html>
 
 <head>
+    <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
     <!-- No /homey.js include here on purpose: in custom PAIR views the Homey
          object is injected globally by every client (mobile app, my.homey.app,
@@ -111,6 +112,16 @@
     <div class="hint">Enable if your NAS is behind a reverse proxy (e.g. Nginx Proxy Manager) or uses HTTPS on the given port.</div>
 
     <button class="button" id="loginBtn" onclick="login()">Login &amp; Add Device</button>
+
+    <div id="otpSection" style="display: none;">
+        <div class="hint" style="margin-bottom: 15px;">This account uses two-factor authentication. Enter the current code from your authenticator app — Homey is then registered as a trusted device, so you only have to do this once.</div>
+        <div class="field">
+            <label for="otpCode">Two-Factor Code</label>
+            <input type="text" id="otpCode" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
+        </div>
+        <button class="button" id="otpBtn" onclick="verifyOtp()">Verify &amp; Add Device</button>
+    </div>
+
     <div id="errorMsg" class="error"></div>
 
     <script type="text/javascript">
@@ -175,7 +186,7 @@
                 resetButton('Connection timed out. Please check the IP/port and try again.');
             }, 20000);
 
-            HomeyRef.emit('login', { ip, port, username, password, useHttps }, function (err, device) {
+            HomeyRef.emit('login', { ip, port, username, password, useHttps }, function (err, result) {
                 clearTimeout(pendingTimeout);
                 if (err) {
                     let errMsg = err.message || err;
@@ -186,13 +197,76 @@
                     return;
                 }
 
-                HomeyRef.createDevice(device, function (err, result) {
-                    if (err) {
-                        resetButton('Error creating device: ' + (err.message || err));
-                        return;
-                    }
-                    HomeyRef.done();
-                });
+                // The account has 2FA enabled: the NAS only hands out a token
+                // after a code has been verified against this login attempt.
+                if (result && result.needsOtp) {
+                    showOtpStep();
+                    return;
+                }
+
+                createDevice(result);
+            });
+        }
+
+        function showOtpStep() {
+            document.getElementById('loginBtn').style.display = 'none';
+            document.getElementById('otpSection').style.display = 'block';
+            document.getElementById('errorMsg').style.display = 'none';
+            document.getElementById('otpCode').focus();
+        }
+
+        function resetOtpButton(message) {
+            const btn = document.getElementById('otpBtn');
+            const errDiv = document.getElementById('errorMsg');
+            btn.disabled = false;
+            btn.innerText = 'Verify & Add Device';
+            if (message) {
+                errDiv.innerText = message;
+                errDiv.style.display = 'block';
+            }
+        }
+
+        function verifyOtp() {
+            const btn = document.getElementById('otpBtn');
+            const errDiv = document.getElementById('errorMsg');
+            const code = document.getElementById('otpCode').value;
+
+            if (!code) {
+                errDiv.innerText = 'Please enter the code from your authenticator app.';
+                errDiv.style.display = 'block';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerText = 'Verifying...';
+            errDiv.style.display = 'none';
+
+            clearTimeout(pendingTimeout);
+            pendingTimeout = setTimeout(() => {
+                resetOtpButton('Verification timed out. Please try again.');
+            }, 20000);
+
+            HomeyRef.emit('verify_otp', { code }, function (err, device) {
+                clearTimeout(pendingTimeout);
+                if (err) {
+                    resetOtpButton(err.message || err);
+                    return;
+                }
+
+                createDevice(device);
+            });
+        }
+
+        function createDevice(device) {
+            HomeyRef.createDevice(device, function (err) {
+                if (err) {
+                    // Re-enable whichever button the user is looking at.
+                    const inOtpStep = document.getElementById('otpSection').style.display === 'block';
+                    const message = 'Error creating device: ' + (err.message || err);
+                    inOtpStep ? resetOtpButton(message) : resetButton(message);
+                    return;
+                }
+                HomeyRef.done();
             });
         }
 

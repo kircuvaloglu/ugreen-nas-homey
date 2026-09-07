@@ -17,6 +17,11 @@ class UgreenNasApp extends Homey.App {
         await device.getClient().reboot();
       });
 
+    this.homey.flow.getConditionCard('backup_running')
+      .registerRunListener(async ({ device }) => {
+        return device.getClient().isBackupRunning();
+      });
+
     this.homey.flow.getConditionCard('disk_activity_above')
       .registerRunListener(async ({ device, rate }) => {
         const read = device.getCapabilityValue('disk_read_rate') || 0;

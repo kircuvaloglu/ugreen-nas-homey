@@ -63,10 +63,26 @@ class UgreenNasDevice extends Homey.Device {
                 port: settings.host_port || 9999,
                 username: settings.username || 'admin',
                 password: settings.password || '',
-                useHttps: settings.use_https === true
+                useHttps: settings.use_https === true,
+                // Set once the user completed a 2FA code during pairing/repair;
+                // it keeps this app trusted so no further codes are needed.
+                clientId: this.getStoreValue('ug_client_id') || null
             });
         }
         return this._client;
+    }
+
+    /**
+     * Drops the cached API client so the next call picks up new credentials or a
+     * freshly trusted client id. Called by the driver after a repair.
+     */
+    async refreshClient() {
+        if (this._client) {
+            this._client.destroy();
+            this._client = null;
+        }
+        await this.getClient().login();
+        await this.setAvailable();
     }
 
     startPolling() {
@@ -267,7 +283,11 @@ class UgreenNasDevice extends Homey.Device {
 
             } catch (err) {
                 this.error('Polling error:', err);
-                await this.setUnavailable('Cannot reach NAS: ' + err.message);
+                if (err.code === 'otp_required') {
+                    await this.setUnavailable('Two-factor authentication is enabled for this account. Repair this device (Device settings → Repair) and enter a code once.');
+                } else {
+                    await this.setUnavailable('Cannot reach NAS: ' + err.message);
+                }
 
                 // If it's auth failure, clear token to force re-login next tick
                 if (this._client && err.message.includes('Login failed')) {
@@ -362,7 +382,8 @@ class UgreenNasDevice extends Homey.Device {
                 port: newSettings.host_port,
                 username: newSettings.username,
                 password: newSettings.password,
-                useHttps: newSettings.use_https === true
+                useHttps: newSettings.use_https === true,
+                clientId: this.getStoreValue('ug_client_id') || null
             });
             // Test connection right away
             try {
@@ -371,6 +392,9 @@ class UgreenNasDevice extends Homey.Device {
                 await this.setAvailable();
             } catch (err) {
                 this.error('Login failed with new settings', err);
+                if (err.code === 'otp_required') {
+                    throw new Error('This account uses two-factor authentication. Please use Repair instead, so a code can be entered.');
+                }
                 throw new Error('Could not login. Please check credentials and IP.');
             }
         }
