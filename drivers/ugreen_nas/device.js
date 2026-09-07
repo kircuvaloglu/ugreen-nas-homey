@@ -155,15 +155,12 @@ class UgreenNasDevice extends Homey.Device {
                             const capId = `measure_temperature.${diskName.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
                             let labelEn = `Disk ${diskName} Temp`;
-                            let labelTr = `Disk ${diskName} Sıcaklık`;
 
                             if (diskName.startsWith('nvme')) {
                                 labelEn = `M.2 Hard Drive ${nvmeCount}`;
-                                labelTr = `M.2 Sabit Sürücü ${nvmeCount} Sıcaklığı`;
                                 nvmeCount++;
                             } else if (diskName.startsWith('sd')) {
                                 labelEn = `Hard Drive ${hddCount}`;
-                                labelTr = `Sabit Sürücü ${hddCount} Sıcaklığı`;
                                 hddCount++;
                             }
 
@@ -171,7 +168,7 @@ class UgreenNasDevice extends Homey.Device {
                                 await this.addCapability(capId);
                                 try {
                                     await this.setCapabilityOptions(capId, {
-                                        title: { en: labelEn, tr: labelTr }
+                                        title: { en: labelEn }
                                     });
                                 } catch (e) { }
                             }
@@ -193,7 +190,7 @@ class UgreenNasDevice extends Homey.Device {
                                     await this.addCapability(capId);
                                     try {
                                         await this.setCapabilityOptions(capId, {
-                                            title: { en: `System Fan ${i + 1}`, tr: `Sistem Fanı ${i + 1}` }
+                                            title: { en: `System Fan ${i + 1}` }
                                         });
                                     } catch (e) { }
                                 }
@@ -213,7 +210,7 @@ class UgreenNasDevice extends Homey.Device {
                                     await this.addCapability(capId);
                                     try {
                                         await this.setCapabilityOptions(capId, {
-                                            title: { en: `CPU Fan ${i + 1}`, tr: `İşlemci Fanı ${i + 1}` }
+                                            title: { en: `CPU Fan ${i + 1}` }
                                         });
                                     } catch (e) { }
                                 }
@@ -267,7 +264,7 @@ class UgreenNasDevice extends Homey.Device {
                             if (!this.hasCapability(capId)) {
                                 await this.addCapability(capId);
                                 await this.setCapabilityOptions(capId, {
-                                    title: { en: `Pool ${i + 1} Usage`, tr: `Havuz ${i + 1} Doluluk` },
+                                    title: { en: `Pool ${i + 1} Usage` },
                                     icon: '/assets/icons/pool.svg'
                                 });
                             }

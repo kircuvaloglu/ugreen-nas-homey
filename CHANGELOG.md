@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.4.0 – 2026-09-07 (not yet published)
+## v1.3.5 – 2026-09-07 (not yet published)
 
 ### 🐛 Bug Fix: Login Failed on Accounts With Two-Factor Authentication
 - Reported by @byackee1 (post #56) on a UNAS 6800 Pro: *"Login failed: The client is not compatible with the firmware, please update the client!"*. Despite the wording this is not a firmware or version problem — UGOS answers with code `9406` when the login payload sets `otp: false` while the account has 2FA enabled. The same misleading error was diagnosed by the community UGOS reverse-engineering work ([home-assistant_ugreen-nas#247](https://github.com/Tom-Bom-badil/home-assistant_ugreen-nas/pull/247)).
@@ -19,6 +19,7 @@
 ### 🧹 Housekeeping
 - Requests to the NAS no longer identify this app as `HomeAssistant/2026.1.0 aiohttp/...` (a leftover from the original API research) but as `Homey-UgreenNAS`.
 - Added the missing `<meta charset="utf-8">` to the pairing views so non-ASCII characters render correctly.
+- Removed the partial Turkish translations from the manifest and the dynamically created capability titles: the app is now English-only, so every user sees the same, fully reviewed wording.
 
 ## v1.3.0 – 2026-07-16 (not yet published)
 
