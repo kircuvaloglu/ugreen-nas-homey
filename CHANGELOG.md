@@ -1,6 +1,22 @@
 # Changelog
 
-## v1.3.5 – 2026-09-07 (not yet published)
+## v1.3.6 – 2026-11-27
+
+### 🐛 Bug Fix: Overlapping Polls on Slow Connections
+- The device polled the NAS every 10 seconds without checking whether the previous poll had finished. Every request may wait up to 8 seconds, so on a slow NAS (or with a re-login in between) two polls could run at the same time, which led to duplicate logins and "capability already exists" errors when disks/fans/pools were added. A poll is now skipped while the previous one is still running.
+
+### 🐛 Bug Fix: Two-Factor Handshake Used Two Different Client Ids
+- The `UG-Client-Id` that UGOS uses to remember Homey as a trusted device was only created when the 2FA code was confirmed, so the first login request of the handshake went out without it. The id is now created before the first request and stored on the device (also for devices paired earlier), so login → code → trust all run under the same id and the NAS always sees the same client.
+
+### ✨ Widget: Disks, Fans and All Storage Pools
+- The NAS Status widget now lists disk temperatures, fan speeds and every storage pool below the main tiles, as described in the app description. The widget grows to fit the list. A new widget setting, *Show disks, fans and pools*, turns the list off for the compact 300 px view.
+- The network tile now also shows the upload rate.
+- Names coming from the NAS are now HTML-escaped before they are shown.
+
+### 🧹 Housekeeping
+- HTTP requests now use `undici`'s own `fetch` together with its connection `Agent`, instead of mixing the bundled `undici` Agent with Node's global `fetch` (which ships a different `undici` version).
+
+## v1.3.5 – 2026-09-07
 
 ### 🐛 Bug Fix: Login Failed on Accounts With Two-Factor Authentication
 - Reported by @byackee1 (post #56) on a UNAS 6800 Pro: *"Login failed: The client is not compatible with the firmware, please update the client!"*. Despite the wording this is not a firmware or version problem — UGOS answers with code `9406` when the login payload sets `otp: false` while the account has 2FA enabled. The same misleading error was diagnosed by the community UGOS reverse-engineering work ([home-assistant_ugreen-nas#247](https://github.com/Tom-Bom-badil/home-assistant_ugreen-nas/pull/247)).

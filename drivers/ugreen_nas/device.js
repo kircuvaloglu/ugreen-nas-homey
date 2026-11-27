@@ -68,8 +68,21 @@ class UgreenNasDevice extends Homey.Device {
                 // it keeps this app trusted so no further codes are needed.
                 clientId: this.getStoreValue('ug_client_id') || null
             });
+            this._persistClientId(this._client);
         }
         return this._client;
+    }
+
+    /**
+     * Devices paired before v1.3.6 have no client id yet. The client generates
+     * one; keep it, so the NAS sees the same client on every login instead of
+     * a new one after each app restart.
+     */
+    _persistClientId(client) {
+        if (client.clientId && client.clientId !== this.getStoreValue('ug_client_id')) {
+            this.setStoreValue('ug_client_id', client.clientId)
+                .catch(err => this.error('Failed to store client id', err));
+        }
     }
 
     /**
@@ -89,209 +102,225 @@ class UgreenNasDevice extends Homey.Device {
         this.log('Starting polling loop');
 
         // Dynamic stats (default every 10 seconds)
+        // A tick can take longer than the interval (each request may wait up to
+        // 8 s, plus a re-login). Skip a tick while the previous one is still
+        // running, so logins and addCapability calls never run in parallel.
+        this._polling = false;
         this._syncInterval = this.homey.setInterval(async () => {
+            if (this._polling) return;
+            this._polling = true;
             try {
-                const client = this.getClient();
-                let stats = {};
-                try {
-                    stats = await client.getSystemStats();
-                } catch (statsErr) {
-                    if (statsErr.message.includes('1008') || statsErr.message.includes('no access') || statsErr.message.includes('General users')) {
-                        this.log('User has no permission to fetch system stats. Skipping stats update.');
-                    } else {
-                        throw statsErr;
+                await this._poll();
+            } catch (err) {
+                this.error('Unexpected polling error:', err);
+            } finally {
+                this._polling = false;
+            }
+        }, 10 * 1000); // 10 seconds
+    }
+
+    async _poll() {
+        try {
+            const client = this.getClient();
+            let stats = {};
+            try {
+                stats = await client.getSystemStats();
+            } catch (statsErr) {
+                if (statsErr.message.includes('1008') || statsErr.message.includes('no access') || statsErr.message.includes('General users')) {
+                    this.log('User has no permission to fetch system stats. Skipping stats update.');
+                } else {
+                    throw statsErr;
+                }
+            }
+
+            // Start WebSocket keepalive (only initiates if token exists and ws is null)
+            client.startWsKeepAlive();
+
+            // CPU
+            if (stats.overview && stats.overview.cpu && stats.overview.cpu.length > 0) {
+                const cpuUsage = stats.overview.cpu[0].used_percent;
+                const cpuTemp = stats.overview.cpu[0].temp;
+                await this.setCapabilityValue('measure_cpu', cpuUsage);
+                await this.setCapabilityValue('measure_temperature', cpuTemp);
+            }
+
+            // RAM
+            if (stats.overview && stats.overview.mem && stats.overview.mem.length > 0) {
+                const memUsage = stats.overview.mem[0].used_percent;
+                await this.setCapabilityValue('measure_memory', memUsage);
+            }
+
+            // Network
+            if (stats.net && stats.net.series && stats.net.series.length > 0) {
+                // Convert B/s to kB/s for easier reading, or keep raw depends on capability
+                const rxBytes = stats.net.series[0].recv_rate;
+                const txBytes = stats.net.series[0].send_rate;
+                // measure_network_rx expects number
+                await this.setCapabilityValue('measure_network_rx', Math.round(rxBytes / 1024));
+                await this.setCapabilityValue('measure_network_tx', Math.round(txBytes / 1024));
+            }
+
+            // Overall Disk Read/Write rates
+            if (stats.disk && stats.disk.series && stats.disk.series.length > 0) {
+                await this.setCapabilityValue('disk_read_rate', Math.round(stats.disk.series[0].read_rate / 1024));
+                await this.setCapabilityValue('disk_write_rate', Math.round(stats.disk.series[0].write_rate / 1024));
+            }
+
+            // Disk Temperatures dynamically added
+            if (stats.disk && stats.disk.series && stats.disk.series.length > 0) {
+                let hddCount = 1;
+                let nvmeCount = 1;
+                // Usually the first item [0] is overall, or it contains each disk. Checking API structure, length > 1 might mean individual disks.
+                // The Ugreen python HA component starts disks from index 0 or 1. Let's iterate all of them.
+                for (let i = 0; i < stats.disk.series.length; i++) {
+                    const disk = stats.disk.series[i];
+                    // Skip the aggregate "overview" item
+                    if (disk.name === 'overview') continue;
+
+                    const temp = disk.temperature !== undefined ? disk.temperature : disk.temp;
+
+                    // Map only disks that have a valid temperature greater than 0
+                    if (temp !== undefined && temp !== null && temp > 0) {
+                        const diskName = disk.name || `sda${i}`;
+                        const capId = `measure_temperature.${diskName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+                        let labelEn = `Disk ${diskName} Temp`;
+
+                        if (diskName.startsWith('nvme')) {
+                            labelEn = `M.2 Hard Drive ${nvmeCount}`;
+                            nvmeCount++;
+                        } else if (diskName.startsWith('sd')) {
+                            labelEn = `Hard Drive ${hddCount}`;
+                            hddCount++;
+                        }
+
+                        if (!this.hasCapability(capId)) {
+                            await this.addCapability(capId);
+                            try {
+                                await this.setCapabilityOptions(capId, {
+                                    title: { en: labelEn }
+                                });
+                            } catch (e) { }
+                        }
+
+                        await this.setCapabilityValue(capId, temp);
                     }
                 }
+            }
 
-                // Start WebSocket keepalive (only initiates if token exists and ws is null)
-                client.startWsKeepAlive();
-
-                // CPU
-                if (stats.overview && stats.overview.cpu && stats.overview.cpu.length > 0) {
-                    const cpuUsage = stats.overview.cpu[0].used_percent;
-                    const cpuTemp = stats.overview.cpu[0].temp;
-                    await this.setCapabilityValue('measure_cpu', cpuUsage);
-                    await this.setCapabilityValue('measure_temperature', cpuTemp);
-                }
-
-                // RAM
-                if (stats.overview && stats.overview.mem && stats.overview.mem.length > 0) {
-                    const memUsage = stats.overview.mem[0].used_percent;
-                    await this.setCapabilityValue('measure_memory', memUsage);
-                }
-
-                // Network
-                if (stats.net && stats.net.series && stats.net.series.length > 0) {
-                    // Convert B/s to kB/s for easier reading, or keep raw depends on capability
-                    const rxBytes = stats.net.series[0].recv_rate;
-                    const txBytes = stats.net.series[0].send_rate;
-                    // measure_network_rx expects number
-                    await this.setCapabilityValue('measure_network_rx', Math.round(rxBytes / 1024));
-                    await this.setCapabilityValue('measure_network_tx', Math.round(txBytes / 1024));
-                }
-
-                // Overall Disk Read/Write rates
-                if (stats.disk && stats.disk.series && stats.disk.series.length > 0) {
-                    await this.setCapabilityValue('disk_read_rate', Math.round(stats.disk.series[0].read_rate / 1024));
-                    await this.setCapabilityValue('disk_write_rate', Math.round(stats.disk.series[0].write_rate / 1024));
-                }
-
-                // Disk Temperatures dynamically added
-                if (stats.disk && stats.disk.series && stats.disk.series.length > 0) {
-                    let hddCount = 1;
-                    let nvmeCount = 1;
-                    // Usually the first item [0] is overall, or it contains each disk. Checking API structure, length > 1 might mean individual disks.
-                    // The Ugreen python HA component starts disks from index 0 or 1. Let's iterate all of them.
-                    for (let i = 0; i < stats.disk.series.length; i++) {
-                        const disk = stats.disk.series[i];
-                        // Skip the aggregate "overview" item
-                        if (disk.name === 'overview') continue;
-
-                        const temp = disk.temperature !== undefined ? disk.temperature : disk.temp;
-
-                        // Map only disks that have a valid temperature greater than 0
-                        if (temp !== undefined && temp !== null && temp > 0) {
-                            const diskName = disk.name || `sda${i}`;
-                            const capId = `measure_temperature.${diskName.replace(/[^a-zA-Z0-9]/g, '_')}`;
-
-                            let labelEn = `Disk ${diskName} Temp`;
-
-                            if (diskName.startsWith('nvme')) {
-                                labelEn = `M.2 Hard Drive ${nvmeCount}`;
-                                nvmeCount++;
-                            } else if (diskName.startsWith('sd')) {
-                                labelEn = `Hard Drive ${hddCount}`;
-                                hddCount++;
-                            }
-
+            // Fan Speeds dynamically added
+            try {
+                // System (device) fans
+                if (stats.overview && stats.overview.device_fan && Array.isArray(stats.overview.device_fan)) {
+                    for (let i = 0; i < stats.overview.device_fan.length; i++) {
+                        const fan = stats.overview.device_fan[i];
+                        if (fan.speed !== undefined && fan.speed >= 0) {
+                            const capId = `measure_fan_speed.chassis_${i}`;
                             if (!this.hasCapability(capId)) {
                                 await this.addCapability(capId);
                                 try {
                                     await this.setCapabilityOptions(capId, {
-                                        title: { en: labelEn }
+                                        title: { en: `System Fan ${i + 1}` }
                                     });
                                 } catch (e) { }
                             }
 
-                            await this.setCapabilityValue(capId, temp);
+                            await this.setCapabilityValue(capId, fan.speed);
                         }
                     }
                 }
 
-                // Fan Speeds dynamically added
-                try {
-                    // System (device) fans
-                    if (stats.overview && stats.overview.device_fan && Array.isArray(stats.overview.device_fan)) {
-                        for (let i = 0; i < stats.overview.device_fan.length; i++) {
-                            const fan = stats.overview.device_fan[i];
-                            if (fan.speed !== undefined && fan.speed >= 0) {
-                                const capId = `measure_fan_speed.chassis_${i}`;
-                                if (!this.hasCapability(capId)) {
-                                    await this.addCapability(capId);
-                                    try {
-                                        await this.setCapabilityOptions(capId, {
-                                            title: { en: `System Fan ${i + 1}` }
-                                        });
-                                    } catch (e) { }
-                                }
-
-                                await this.setCapabilityValue(capId, fan.speed);
-                            }
-                        }
-                    }
-
-                    // CPU fans
-                    if (stats.overview && stats.overview.cpu_fan && Array.isArray(stats.overview.cpu_fan)) {
-                        for (let i = 0; i < stats.overview.cpu_fan.length; i++) {
-                            const fan = stats.overview.cpu_fan[i];
-                            if (fan.speed !== undefined && fan.speed >= 0) {
-                                const capId = `measure_fan_speed.cpu_${i}`;
-                                if (!this.hasCapability(capId)) {
-                                    await this.addCapability(capId);
-                                    try {
-                                        await this.setCapabilityOptions(capId, {
-                                            title: { en: `CPU Fan ${i + 1}` }
-                                        });
-                                    } catch (e) { }
-                                }
-
-                                await this.setCapabilityValue(capId, fan.speed);
-                            }
-                        }
-                    }
-                } catch (fanErr) {
-                    this.log('Fan fetching error:', fanErr.message);
-                }
-
-                // Storage Pools dynamically added
-                try {
-                    const pools = await client.getStoragePools();
-                    if (pools && pools.length > 0) {
-                        for (let i = 0; i < pools.length; i++) {
-                            const pool = pools[i];
-                            let poolTotal = 0;
-                            let poolUsed = 0;
-
-                            // 1) First try to calculate usage by summing up actual Volume sizes
-                            if (pool.volumes && pool.volumes.length > 0) {
-                                for (let v = 0; v < pool.volumes.length; v++) {
-                                    const vol = pool.volumes[v];
-                                    poolTotal += (vol.total || vol.size || vol.capacity || 0);
-                                    poolUsed += (vol.used || vol.space_used || 0);
-                                }
-                            }
-
-                            // 2) If total is still 0 (no volumes, or missing properties), fallback to Pool properties
-                            if (poolTotal === 0) {
-                                poolTotal = pool.total || pool.size || pool.capacity || 0;
-
-                                // Ugreen often sets pool 'used' == 'total' just to indicate allocation.
-                                // If they are identical, we should report 0% instead of 100% for an empty drive.
-                                if (pool.space_used !== undefined) {
-                                    poolUsed = pool.space_used;
-                                } else if (pool.used && pool.used < poolTotal) {
-                                    poolUsed = pool.used;
-                                } else {
-                                    // Dummy allocation indicator (pool.used == pool.total), so actual file contents = 0
-                                    poolUsed = 0;
-                                }
-                            }
-
-                            // 3) Calculate percentage safely, fallback to 0% if total is 0
-                            const usagePercent = poolTotal > 0 ? (Math.round((poolUsed / poolTotal) * 1000) / 10) : 0;
-
-                            const capId = `measure_pool_usage.pool_${i}`;
+                // CPU fans
+                if (stats.overview && stats.overview.cpu_fan && Array.isArray(stats.overview.cpu_fan)) {
+                    for (let i = 0; i < stats.overview.cpu_fan.length; i++) {
+                        const fan = stats.overview.cpu_fan[i];
+                        if (fan.speed !== undefined && fan.speed >= 0) {
+                            const capId = `measure_fan_speed.cpu_${i}`;
                             if (!this.hasCapability(capId)) {
                                 await this.addCapability(capId);
-                                await this.setCapabilityOptions(capId, {
-                                    title: { en: `Pool ${i + 1} Usage` },
-                                    icon: '/assets/icons/pool.svg'
-                                });
+                                try {
+                                    await this.setCapabilityOptions(capId, {
+                                        title: { en: `CPU Fan ${i + 1}` }
+                                    });
+                                } catch (e) { }
                             }
-                            await this.setCapabilityValue(capId, usagePercent);
+
+                            await this.setCapabilityValue(capId, fan.speed);
                         }
                     }
-                } catch (poolErr) {
-                    this.log('Pool fetching error or unsupported on this model:', poolErr.message);
                 }
-
-                // Availability
-                if (!this.getAvailable()) await this.setAvailable();
-
-            } catch (err) {
-                this.error('Polling error:', err);
-                if (err.code === 'otp_required') {
-                    await this.setUnavailable('Two-factor authentication is enabled for this account. Repair this device (Device settings → Repair) and enter a code once.');
-                } else {
-                    await this.setUnavailable('Cannot reach NAS: ' + err.message);
-                }
-
-                // If it's auth failure, clear token to force re-login next tick
-                if (this._client && err.message.includes('Login failed')) {
-                    this._client.token = null;
-                }
+            } catch (fanErr) {
+                this.log('Fan fetching error:', fanErr.message);
             }
-        }, 10 * 1000); // 10 seconds
+
+            // Storage Pools dynamically added
+            try {
+                const pools = await client.getStoragePools();
+                if (pools && pools.length > 0) {
+                    for (let i = 0; i < pools.length; i++) {
+                        const pool = pools[i];
+                        let poolTotal = 0;
+                        let poolUsed = 0;
+
+                        // 1) First try to calculate usage by summing up actual Volume sizes
+                        if (pool.volumes && pool.volumes.length > 0) {
+                            for (let v = 0; v < pool.volumes.length; v++) {
+                                const vol = pool.volumes[v];
+                                poolTotal += (vol.total || vol.size || vol.capacity || 0);
+                                poolUsed += (vol.used || vol.space_used || 0);
+                            }
+                        }
+
+                        // 2) If total is still 0 (no volumes, or missing properties), fallback to Pool properties
+                        if (poolTotal === 0) {
+                            poolTotal = pool.total || pool.size || pool.capacity || 0;
+
+                            // Ugreen often sets pool 'used' == 'total' just to indicate allocation.
+                            // If they are identical, we should report 0% instead of 100% for an empty drive.
+                            if (pool.space_used !== undefined) {
+                                poolUsed = pool.space_used;
+                            } else if (pool.used && pool.used < poolTotal) {
+                                poolUsed = pool.used;
+                            } else {
+                                // Dummy allocation indicator (pool.used == pool.total), so actual file contents = 0
+                                poolUsed = 0;
+                            }
+                        }
+
+                        // 3) Calculate percentage safely, fallback to 0% if total is 0
+                        const usagePercent = poolTotal > 0 ? (Math.round((poolUsed / poolTotal) * 1000) / 10) : 0;
+
+                        const capId = `measure_pool_usage.pool_${i}`;
+                        if (!this.hasCapability(capId)) {
+                            await this.addCapability(capId);
+                            await this.setCapabilityOptions(capId, {
+                                title: { en: `Pool ${i + 1} Usage` },
+                                icon: '/assets/icons/pool.svg'
+                            });
+                        }
+                        await this.setCapabilityValue(capId, usagePercent);
+                    }
+                }
+            } catch (poolErr) {
+                this.log('Pool fetching error or unsupported on this model:', poolErr.message);
+            }
+
+            // Availability
+            if (!this.getAvailable()) await this.setAvailable();
+
+        } catch (err) {
+            this.error('Polling error:', err);
+            if (err.code === 'otp_required') {
+                await this.setUnavailable('Two-factor authentication is enabled for this account. Repair this device (Device settings → Repair) and enter a code once.');
+            } else {
+                await this.setUnavailable('Cannot reach NAS: ' + err.message);
+            }
+
+            // If it's auth failure, clear token to force re-login next tick
+            if (this._client && err.message.includes('Login failed')) {
+                this._client.token = null;
+            }
+        }
     }
 
     onDeleted() {
@@ -382,6 +411,7 @@ class UgreenNasDevice extends Homey.Device {
                 useHttps: newSettings.use_https === true,
                 clientId: this.getStoreValue('ug_client_id') || null
             });
+            this._persistClientId(this._client);
             // Test connection right away
             try {
                 await this._client.login();

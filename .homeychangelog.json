@@ -13,5 +13,8 @@
   },
   "1.3.5": {
     "en": "Fixed logging in on accounts that use two-factor authentication, which failed with a misleading \"client is not compatible with the firmware\" error. Pairing now asks for your authenticator code once and registers Homey as a trusted device, so you are not asked again. Also new: reconnect an existing NAS from Device settings > Repair without removing it, and a Flow condition \"A backup task is running\" so a Flow can wait until your backup has finished."
+  },
+  "1.3.6": {
+    "en": "The NAS Status widget now lists disk temperatures, fan speeds and all storage pools (can be turned off in the widget settings). More reliable two-factor login: the trusted-device id is now used from the very first login request. Fixed overlapping polls on slow connections, which could cause duplicate logins."
   }
 }
