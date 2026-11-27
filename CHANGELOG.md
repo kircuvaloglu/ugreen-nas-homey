@@ -14,6 +14,7 @@
 - Names coming from the NAS are now HTML-escaped before they are shown.
 
 ### 🧹 Housekeeping
+- Shortened the App Store description to two paragraphs and removed the list of Flow cards from it, as asked in the App Store review of v1.3.5 (the store page now lists the Flow cards in its own section). The GitHub repository is linked as the app's source code.
 - HTTP requests now use `undici`'s own `fetch` together with its connection `Agent`, instead of mixing the bundled `undici` Agent with Node's global `fetch` (which ships a different `undici` version).
 
 ## v1.3.5 – 2026-09-07
