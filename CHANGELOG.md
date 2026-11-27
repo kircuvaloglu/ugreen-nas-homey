@@ -1,6 +1,12 @@
 # Changelog
 
-## v1.3.6 – 2026-11-27
+## v1.3.7 – 2026-11-27
+
+### ⚡ Much Smaller App Package
+- `package.json` listed the `homey` npm package (the Homey command-line tool) as a runtime dependency. It pulled in more than 400 packages, so every install and update downloaded about 65 MB (12,000+ files). Apps do not need it: the `homey` module is provided by the Homey runtime itself. Removing it brings the package down to about 2 MB; only `undici` and `ws` are bundled now.
+- Includes all changes from v1.3.6, which was uploaded but not released.
+
+## v1.3.6 – 2026-11-27 (not released, superseded by v1.3.7)
 
 ### 🐛 Bug Fix: Overlapping Polls on Slow Connections
 - The device polled the NAS every 10 seconds without checking whether the previous poll had finished. Every request may wait up to 8 seconds, so on a slow NAS (or with a re-login in between) two polls could run at the same time, which led to duplicate logins and "capability already exists" errors when disks/fans/pools were added. A poll is now skipped while the previous one is still running.
